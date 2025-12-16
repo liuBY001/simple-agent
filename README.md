@@ -17,11 +17,13 @@ Then visit http://localhost:3000/
 
 The ability of the agent is bounded by the set of tools that it can call. The list below describes what the agent ability 
 
-- [x] write html report
+- [x] read report
+- [x] write report
+- [x] update report
 - [x] provide choices for user to choose
 - [x] provide forms for user to complete
-- [ ] update html report
-
+- [ ] streaming message
+- [ ] streaming progress, especially the report generation
 
 ## Repo Structure
 
