@@ -2,57 +2,77 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: white;
-  border-radius: 12px;
+  background: transparent;
   overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
 .report-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px;
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  color: white;
+  padding: 16px 20px;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid rgba(255, 0, 255, 0.2);
 }
 
 .report-header h2 {
   margin: 0;
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 500;
+  color: #ff00ff;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  text-shadow: 0 0 5px rgba(255, 0, 255, 0.3);
 }
 
 .refresh-button {
-  padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.25);
-  color: white;
-  border: 2px solid white;
-  border-radius: 20px;
-  font-size: 14px;
+  padding: 6px 16px;
+  background: transparent;
+  color: #ff00ff;
+  border: 1px solid #ff00ff;
+  border-radius: 4px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
   display: flex;
   align-items: center;
   gap: 6px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
 .refresh-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.4);
-  transform: scale(1.05);
+  background: #ff00ff;
+  color: #000;
+  box-shadow: 0 0 15px rgba(255, 0, 255, 0.4);
 }
 
 .refresh-button:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
+  border-color: #555;
+  color: #555;
   cursor: not-allowed;
 }
 
 .report-content {
   flex: 1;
   overflow-y: auto;
-  background: #f8f9fa;
+  background: #fff; /* Keep white for readability of standard HTML reports, or change to dark if reports support it */
+  position: relative;
+  /* If we want a dark mode browser feel */
+  filter: invert(0.9) hue-rotate(180deg); /* This is a hacky way to make iframe dark mode */
 }
+/* Revert filter for the iframe itself if it's already dark or to prevent color shift if desired. 
+   For now, assuming standard white HTML reports, the invert trick gives a quick dark mode feel. 
+   But user asked for "Cyberpunk", so a dark report is fitting. 
+   However, it might invert images. Let's stick to standard white or use a light gray to not break content.
+*/
+.report-content {
+  filter: none;
+  background: #e0e0e0; /* Light gray to fit better than stark white but keep readability */
+}
+
 
 .report-loading {
   display: flex;
@@ -60,93 +80,24 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #666;
+  color: #ff00ff;
+  background: rgba(10, 10, 15, 0.9) !important;
+  backdrop-filter: blur(5px);
 }
 
 .report-loading .loading-spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid #e0e0e0;
-  border-top-color: #f5576c;
+  border: 2px solid rgba(255, 0, 255, 0.3);
+  border-top-color: #ff00ff;
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 16px;
+  box-shadow: 0 0 15px rgba(255, 0, 255, 0.2);
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.report-error {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  padding: 40px;
-  color: #d32f2f;
-  text-align: center;
-}
-
-.error-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-
-.report-error p {
-  font-size: 16px;
-  margin-bottom: 20px;
-}
-
-.retry-button {
-  padding: 10px 24px;
-  background: #d32f2f;
-  color: white;
-  border: none;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.retry-button:hover {
-  background: #b71c1c;
-  transform: translateY(-2px);
-}
-
-.report-html-content {
-  padding: 0;
-  animation: fadeIn 0.5s ease-out;
-  min-height: 100%;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-/* Override styles for the embedded HTML content */
-.report-html-content img {
-  max-width: 100%;
-  height: auto;
-  border-radius: 8px;
-}
-
-.report-html-content h1,
-.report-html-content h2,
-.report-html-content h3 {
-  color: #333;
-}
-
-.report-html-content section {
-  margin-bottom: 24px;
+.report-iframe {
+  background: white; /* Ensure iframe has a background */
 }
 
 /* Scrollbar styling */
@@ -155,16 +106,14 @@
 }
 
 .report-content::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 4px;
+  background: #333;
 }
 
 .report-content::-webkit-scrollbar-thumb {
-  background: #f5576c;
+  background: #ff00ff;
   border-radius: 4px;
 }
 
 .report-content::-webkit-scrollbar-thumb:hover {
-  background: #f093fb;
+  background: #d000d0;
 }
-
