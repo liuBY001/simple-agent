@@ -23,7 +23,8 @@ class FormRow(BaseModel):
 class FormRequest(BaseModel):
     # Form request message
     type: Literal["form_request"] = Field(default="form_request")
-    rows: list[FormRow]
+    description: str = Field(default="", description="The description of the form, displayed above the form.")
+    rows: list[FormRow] = Field(default_factory=list)
 
 
 class FormResult(BaseModel):
@@ -33,6 +34,7 @@ class FormResult(BaseModel):
 
 class ChoiceRequest(BaseModel):
     type: Literal["choice_request"] = Field(default="choice_request")
+    description: str = Field(default="", description="The description of the choice question, displayed above the choices.")
     options: list[str]
     single_choice: bool
 

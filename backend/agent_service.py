@@ -4,8 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
-from agent.agent_openai import oai_client
-from agent.agent_openai.agent_html import Agent
+from agent.agent_openai.factory import create_report_agent
 from agent.schema import UIContext
 from agent.logging_utils import setup_logging
 
@@ -70,7 +69,7 @@ def health():
 @app.post("/trigger")
 async def trigger(input: UIContext):
 
-    agent = Agent(client=oai_client)
+    agent = create_report_agent()
     response_generator = agent.trigger(input)
     return StreamingResponse(
         response_generator,

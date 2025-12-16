@@ -1,11 +1,7 @@
-"""
-agent for website construction
-"""
-
 import json
 import asyncio
-import traceback
 from typing import AsyncGenerator
+import logging
 
 from ..schema import (
     UIContext,
@@ -16,40 +12,46 @@ from ..schema import (
     ToolResponseOutput,
     FormRequest,
     FormResult,
-    FormRow,
     ChoiceRequest,
     ChoiceResult,
     LLMFinalResponse,
 )
-from ..tools.tools import get_tool_schema_list, call_tool
-import logging
+from ..tools.tools import get_tool_schema_list, call_tool, tool_call_progress_message
+from .base_agent import ResponsiveAgent
 
 logger = logging.getLogger(__name__)
 
 
-class Agent:
-    def __init__(self, client):
-        self.model = "gpt-5.2"
-        self.client = client
+class Agent(ResponsiveAgent):
+    def __init__(
+        self,
+        oai_client,
+        system_prompt: str,
+        model: str = "gpt-5.2",
+        tools: list[str] = [],
+        web_search: bool = True,
+        reasonging_effort: str = "low",
+        max_round_tool_call: int = 10,
+    ):
+        self.model = model
+        self.client = oai_client
+        self.system_prompt = system_prompt
 
-        self.system_prompt = "You are an expert in html report writing. You can organise the html structure very well and write a beautifully organised html report."
-
-        self.tools = get_tool_schema_list()
-
-        # select a subset of tools
-        allowed_tool_names = ["read_current_report", "write_html_report"]
-        self.tools = [tool for tool in self.tools if tool.get("name") in allowed_tool_names]
+        self.tools = get_tool_schema_list(tools)
 
         # add search tool
-        self.tools.append(
-            {
-                "type": "web_search",
-            }
-        )
+        if web_search:
+            self.tools.append(
+                {
+                    "type": "web_search",
+                }
+            )
 
         # some configs
-        self.reasoning_effort = "low"
-        self.max_rounds_in_one_trigger = 10
+        self.reasoning_effort = reasonging_effort
+        self.max_round_tool_call = max_round_tool_call
+
+        logger.info(f"init agent with model: {self.model}, tools: {self.tools}, web_search: {web_search}, reasoning_effort: {self.reasoning_effort}, max_round_tool_call: {self.max_round_tool_call}")
 
     async def trigger(self, context: UIContext) -> AsyncGenerator[Output, None]:
         """
@@ -63,10 +65,10 @@ class Agent:
         logger.info(f"trigger input: {context}")
 
         # the initial context pass to llm
-        input_list = self.construct_llm_input(context)
+        input_list = self.construct_prompt(context)
 
         get_message = False
-        for i in range(self.max_rounds_in_one_trigger):
+        for i in range(self.max_round_tool_call):
             # get response
             logger.info(f"Round {i}, inputs sent to openai: {input_list}")
 
@@ -115,7 +117,7 @@ class Agent:
         try:
             parsed_response = LLMFinalResponse.model_validate_json(final_response)
         except Exception as e:
-            logger.error(f"final answer parsed failed: {e}")
+            logger.error(f"Failed to parse final response: {e}")
             return final_response
 
         response_type = parsed_response.type
@@ -131,20 +133,20 @@ class Agent:
                     for summary in output.summary:
                         if summary.type == "summary_text":
                             yield self._output_to_sse(ThinkingOutput(content=summary.text))
-            elif output.type == "web_search_call":  # from openai tool
+            elif output.type == "web_search_call":  # OpenAI built-in web search
                 if output.action.type == "search":
                     query = output.action.query or ""
                     if query:
-                        yield self._output_to_sse(ToolCallOutput(content=f"searching: {query}"))
+                        yield self._output_to_sse(ToolCallOutput(content=f"Searching: {query}"))
                 elif output.action.type == "open_page":
                     url = output.action.url or ""
                     if url:
-                        yield self._output_to_sse(ToolCallOutput(content=f"opening page: {url}"))
+                        yield self._output_to_sse(ToolCallOutput(content=f"Opening page: {url}"))
                 elif output.action.type == "find_in_page":
                     pattern = output.action.pattern or ""
                     url = output.action.url or ""
                     if pattern and url:
-                        yield self._output_to_sse(ToolCallOutput(content=f"finding in page: {pattern} in {url}"))
+                        yield self._output_to_sse(ToolCallOutput(content=f"Finding in page: {pattern} in {url}"))
             elif output.type == "message":
                 for content in output.content:
                     if content.type == "output_text":
@@ -152,37 +154,10 @@ class Agent:
                         final_response_parsed = self.parse_final_response(content.text)
                         yield self._output_to_sse(final_response_parsed)
             elif output.type == "function_call":
-                if output.name == "read_current_report":
-                    yield self._output_to_sse(ToolCallOutput(content=f"calling tool: reading current html"))
-                elif output.name == "write_html_report":
-                    yield self._output_to_sse(ToolCallOutput(content=f"calling tool: generating html"))
-                elif output.name == "create_form":
-                    try:
-                        create_form_tool_call = json.loads(output.arguments)
-                        form_headers = create_form_tool_call.get("headers", [])
-                    except Exception as e:
-                        formatted_stacktrace = traceback.format_exception(type(e), e, e.__traceback__)
-                        logger.warning(f"parse form request failed, {formatted_stacktrace}")
-                        form_headers = []
-                    if form_headers:
-                        rows = [FormRow(header=h) for h in form_headers]
-                        yield self._output_to_sse(FormRequest(rows=rows))
-                elif output.name == "create_choice":
-                    try:
-                        create_choice_tool_call = json.loads(output.arguments)
-                        options = create_choice_tool_call.get("options", [])
-                        single_choice = create_choice_tool_call.get("single_choice", False)
-                    except Exception as e:
-                        formatted_stacktrace = traceback.format_exception(type(e), e, e.__traceback__)
-                        logger.warning(f"parse choice request failed, {formatted_stacktrace}")
-                        options = []
-                        single_choice = False
-
-                    if options and len(options) > 0:
-                        yield self._output_to_sse(ChoiceRequest(options=options, single_choice=single_choice))
-
-                else:
-                    yield self._output_to_sse(ToolCallOutput(content=f"calling tool: {output.name}"))
+                func_name = output.name
+                arguments = json.loads(output.arguments)
+                tool_call_message = tool_call_progress_message(func_name=func_name, kwargs=arguments)
+                yield self._output_to_sse(ToolCallOutput(content=tool_call_message))
 
     def send_tool_result_progress(self, tool_call_results):
         # yield tool outputs
@@ -230,7 +205,7 @@ class Agent:
 
         return tool_call_results
 
-    def construct_llm_input(self, ui_context: UIContext) -> list[dict]:
+    def construct_prompt(self, ui_context: UIContext) -> list[dict]:
         # convert context from ui to openai input format
         openai_context = []
         # add developer prompt
@@ -248,6 +223,8 @@ class Agent:
             elif isinstance(msg, FormRequest):
                 # construct form
                 form_str = ""
+                if msg.description:
+                    form_str += f"{msg.description}\n"
                 for row in msg.rows:
                     form_str += f"{row.header}: {row.content}\n"
                 openai_context.append({"role": "assistant", "content": f"Form:\n{form_str}"})
@@ -259,16 +236,19 @@ class Agent:
                 openai_context.append({"role": "user", "content": f"Form result:\n{form_str}"})
 
             elif isinstance(msg, ChoiceRequest):
+                choice_str = ""
+                if msg.description:
+                    choice_str += f"{msg.description}\n"
                 if msg.single_choice:
-                    choice_str = "choices[single option]:\n"
+                    choice_str += "Options (single choice):\n"
                 else:
-                    choice_str = "choice[multiple options]:\n"
+                    choice_str += "Options (multiple choice):\n"
                 for option in msg.options:
                     choice_str += option + "\n"
                 openai_context.append({"role": "assistant", "content": choice_str})
 
             elif isinstance(msg, ChoiceResult):
-                choosen_str = f"choose: {msg.chosen}"
+                choosen_str = f"Selected: {msg.chosen}"
                 openai_context.append({"role": "user", "content": choosen_str})
 
             else:
