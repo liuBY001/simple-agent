@@ -291,6 +291,8 @@
 
 /* Form Styles */
 .form-request {
+  display: flex;
+  flex-direction: column;
   background: rgba(20, 20, 30, 0.9) !important;
   border: 1px solid #ff00ff !important;
   box-shadow: 0 0 15px rgba(255, 0, 255, 0.15);
@@ -411,6 +413,13 @@
   color: #000;
 }
 
+.choice-result-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .choice-result-tag {
   background: rgba(0, 255, 255, 0.1);
   border: 1px solid rgba(0, 255, 255, 0.3);
@@ -422,6 +431,8 @@
 
 /* Form result display overrides */
 .form-result {
+  display: flex;
+  flex-direction: column;
   background: rgba(0, 255, 255, 0.1) !important;
   border: 1px solid rgba(0, 255, 255, 0.3) !important;
   color: #fff !important;
