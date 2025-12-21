@@ -3,6 +3,9 @@
 A simple implementation of LLM agent, using Openai/Gemini/Claude APIs.
 
 
+![Alt text for screen readers](./assets/agent.png "agent demo")
+
+
 ## Usage
 
 Create a .env file by copying .env.example, while providing the actual api key(s).
