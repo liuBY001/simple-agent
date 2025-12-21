@@ -446,3 +446,32 @@
   font-size: 15px;
   margin-bottom: 8px;
 }
+
+/* Streaming Bar */
+.streaming-bar {
+  background: rgba(0, 255, 255, 0.05);
+  border-top: 1px solid rgba(0, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(0, 255, 255, 0.1);
+  height: 36px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center; /* Center the fixed width content */
+  margin-top: 10px;
+}
+
+.streaming-content {
+  color: #00ffff;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 14px;
+  text-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
+  width: 20ch; /* Fix width to 20 characters */
+  white-space: pre; /* Preserve spaces */
+  text-align: left; /* Text aligns left inside the 20ch box, or right? "flush out old" implies shifting */
+  /* If "flush out old", usually new chars appear at end and push old out start. 
+     If we slice(-20), the text effectively shifts left. 
+     Align right might look like typing at the end. Align left looks like scrolling window.
+     Let's stick to default (left) or center. 
+  */
+  display: inline-block;
+}

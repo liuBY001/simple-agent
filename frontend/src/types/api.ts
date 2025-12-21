@@ -40,7 +40,7 @@ export interface UIContext {
   user_id?: string;
 }
 
-export type OutputType = 'message' | 'thinking' | 'tool_call' | 'tool_response' | 'form_request' | 'choice_request';
+export type OutputType = 'message' | 'thinking' | 'tool_call' | 'tool_response' | 'form_request' | 'choice_request' | 'message_delta' | 'streaming_display';
 
 export interface BaseOutput {
   type: OutputType;
@@ -50,6 +50,16 @@ export interface BaseOutput {
 export interface MessageOutput extends BaseOutput {
   type: 'message';
   role: 'assistant';
+  content: string;
+}
+
+export interface MessageDelta extends BaseOutput {
+  type: 'message_delta';
+  content: string;
+}
+
+export interface StreamingDisplayOutput extends BaseOutput {
+  type: 'streaming_display';
   content: string;
 }
 
@@ -79,4 +89,4 @@ export interface ChoiceRequestOutput {
   single_choice: boolean;
 }
 
-export type StreamOutput = MessageOutput | ThinkingOutput | ToolCallOutput | ToolResponseOutput | FormRequestOutput | ChoiceRequestOutput;
+export type StreamOutput = MessageOutput | ThinkingOutput | ToolCallOutput | ToolResponseOutput | FormRequestOutput | ChoiceRequestOutput | MessageDelta | StreamingDisplayOutput;

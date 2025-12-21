@@ -9,6 +9,7 @@ interface ChatPanelProps {
   processMessages: StreamOutput[];
   onSendMessage: (message: string | FormResult | ChoiceResult) => void;
   isLoading: boolean;
+  streamingContent?: string;
 }
 
 const FormRequestItem = ({ request, onSubmit, disabled }: { request: FormRequest, onSubmit: (res: FormResult) => void, disabled: boolean }) => {
@@ -122,23 +123,38 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   processMessages,
   onSendMessage,
   isLoading,
+  streamingContent
 }) => {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
+  // Auto-scroll logic with smart stickiness and stability
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, processMessages]);
+    if (!containerRef.current || !messagesEndRef.current) return;
+
+    const container = containerRef.current;
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    
+    // Check if user is near the bottom (within 50px threshold)
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 50;
+
+    if (isNearBottom) {
+      // Use 'auto' behavior for instant scrolling during rapid streaming updates
+      // This prevents the "jumping" effect caused by smooth scroll animation conflicts
+      messagesEndRef.current.scrollIntoView({ behavior: 'auto', block: 'end' });
+    }
+  }, [messages, processMessages, streamingContent]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (input.trim() && !isLoading) {
       onSendMessage(input.trim());
       setInput('');
+      // Force smooth scroll to bottom when user sends a message
+      setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }, 50);
     }
   };
 
@@ -149,6 +165,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       if (input.trim() && !isLoading) {
         onSendMessage(input.trim());
         setInput('');
+        // Force smooth scroll to bottom when user sends a message
+        setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }, 50);
       }
     }
   };
@@ -161,7 +181,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       tool_response: '✅',
       message: '💬',
       form_request: '📋',
-      choice_request: '🔢'
+      choice_request: '🔢',
+      streaming_display: '📺'
     };
     const icon = iconMap[msg.type] || '❓';
 
@@ -188,7 +209,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         <h2>💬 HTML Report Chat</h2>
       </div>
 
-      <div className="messages-container">
+      <div className="messages-container" ref={containerRef}>
         {messages.map((msg, index) => {
           if (msg.type === 'form_request') {
              const isAnswered = messages.slice(index + 1).some(m => m.type === 'form_result');
@@ -257,11 +278,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           </div>
         )}
 
-        {isLoading && processMessages.length === 0 && (
+        {isLoading && processMessages.length === 0 && !streamingContent && (
           <div className="loading-indicator">
             <div className="loading-spinner"></div>
             <span>AI is thinking...</span>
           </div>
+        )}
+
+        {streamingContent && (
+            <div className="streaming-bar">
+                <div className="streaming-content">{streamingContent}</div>
+            </div>
         )}
 
         <div ref={messagesEndRef} />

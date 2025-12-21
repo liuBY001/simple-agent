@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { ChatPanel } from './components/ChatPanel';
 import { ReportPanel } from './components/ReportPanel';
-import { Input, Message, StreamOutput, FormResult, FormRequest, ChoiceRequest, ChoiceResult } from './types/api';
+import { Input, Message, StreamOutput, FormResult, FormRequest, ChoiceRequest, ChoiceResult, MessageDelta, StreamingDisplayOutput } from './types/api';
 import { agentService } from './services/agent';
 import './App.css';
 
 function App() {
   const [messages, setMessages] = useState<Input[]>([]);
   const [processMessages, setProcessMessages] = useState<StreamOutput[]>([]);
+  const [streamingContent, setStreamingContent] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [reportRefresh, setReportRefresh] = useState(0);
   const [userId, setUserId] = useState<string>('');
@@ -46,13 +47,37 @@ function App() {
         // We use a local copy to append form requests during the stream
         let currentMessages = [...newMessages];
         let currentProcessMessages: StreamOutput[] = [];
+        let isStreamingMessage = false;
+        let currentStreamingText = '';
 
         for await (const output of stream) {
           if (output.type === 'message') {
+             // Final message received. Replace streaming content.
+             assistantContent = output.content;
+             
+             if (isStreamingMessage) {
+                 const lastMsg = currentMessages[currentMessages.length - 1] as Message;
+                 lastMsg.content = assistantContent;
+             } else {
+                 const assistantMessage: Message = {
+                    role: 'assistant',
+                    content: assistantContent,
+                    type: 'message',
+                    details: [...currentProcessMessages]
+                };
+                currentMessages.push(assistantMessage);
+                isStreamingMessage = true;
+             }
+             setMessages([...currentMessages]);
+
+          } else if (output.type === 'message_delta') {
             assistantContent += output.content;
-          } else if (output.type === 'form_request') {
-            // If there is pending text, add it as a message first
-            if (assistantContent) {
+            
+            // Handle streaming update for message content
+            if (isStreamingMessage) {
+                const lastMsg = currentMessages[currentMessages.length - 1] as Message;
+                lastMsg.content = assistantContent;
+            } else {
                 const assistantMessage: Message = {
                     role: 'assistant',
                     content: assistantContent,
@@ -60,10 +85,22 @@ function App() {
                     details: [...currentProcessMessages]
                 };
                 currentMessages.push(assistantMessage);
-                assistantContent = '';
-                currentProcessMessages = []; // Clear details for next message segment
+                isStreamingMessage = true;
+                // We keep currentProcessMessages in case we need to append more details later
             }
-            
+            setMessages([...currentMessages]);
+
+          } else if (output.type === 'streaming_display') {
+             currentStreamingText += output.content;
+             if (currentStreamingText.length > 20) {
+                 currentStreamingText = currentStreamingText.slice(-20);
+             }
+             setStreamingContent(currentStreamingText);
+          } else if (output.type === 'form_request') {
+             isStreamingMessage = false;
+             assistantContent = '';
+             currentProcessMessages = []; 
+             
             const formRequest: FormRequest = {
                 type: 'form_request',
                 rows: output.rows
@@ -72,18 +109,9 @@ function App() {
             setMessages([...currentMessages]);
             
           } else if (output.type === 'choice_request') {
-             // If there is pending text, add it as a message first
-             if (assistantContent) {
-                const assistantMessage: Message = {
-                    role: 'assistant',
-                    content: assistantContent,
-                    type: 'message',
-                    details: [...currentProcessMessages]
-                };
-                currentMessages.push(assistantMessage);
-                assistantContent = '';
-                currentProcessMessages = []; // Clear details for next message segment
-             }
+             isStreamingMessage = false;
+             assistantContent = '';
+             currentProcessMessages = [];
 
              const choiceRequest: ChoiceRequest = {
                  type: 'choice_request',
@@ -94,13 +122,23 @@ function App() {
              setMessages([...currentMessages]);
 
           } else {
+            // Process message (thinking, tool_call, tool_response)
             currentProcessMessages.push(output);
             setProcessMessages([...currentProcessMessages]);
+            
+            // If we are currently streaming a message, attach this detail to it as well
+            if (isStreamingMessage) {
+                const lastMsg = currentMessages[currentMessages.length - 1] as Message;
+                if (!lastMsg.details) lastMsg.details = [];
+                lastMsg.details.push(output);
+                setMessages([...currentMessages]);
+            }
           }
         }
 
-        // Add final assistant message to history if there is content
-        if (assistantContent) {
+        // Add final assistant message logic is handled by streaming updates, 
+        // but if the loop finishes and we have content that wasn't added (unlikely with streaming logic, but safe to keep)
+        if (assistantContent && !isStreamingMessage) {
           const assistantMessage: Message = {
             role: 'assistant',
             content: assistantContent,
@@ -110,9 +148,10 @@ function App() {
           currentMessages.push(assistantMessage);
           setMessages([...currentMessages]);
         }
-
+        
         // Clear process messages after completion
         setProcessMessages([]);
+        setStreamingContent(''); // Clear streaming display
 
         // Trigger report refresh
         setReportRefresh((prev) => prev + 1);
@@ -124,6 +163,7 @@ function App() {
           type: 'message'
         };
         setMessages([...newMessages, errorMessage]);
+        setStreamingContent('');
       } finally {
         setIsLoading(false);
       }
@@ -146,6 +186,7 @@ function App() {
               processMessages={processMessages}
               onSendMessage={handleSendMessage}
               isLoading={isLoading}
+              streamingContent={streamingContent}
             />
           </div>
 
