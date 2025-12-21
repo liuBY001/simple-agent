@@ -34,7 +34,9 @@ class FormResult(BaseModel):
 
 class ChoiceRequest(BaseModel):
     type: Literal["choice_request"] = Field(default="choice_request")
-    description: str = Field(default="", description="The description of the choice question, displayed above the choices.")
+    description: str = Field(
+        default="", description="The description of the choice question, displayed above the choices."
+    )
     options: list[str]
     single_choice: bool
 
@@ -59,12 +61,32 @@ class ToolResponseOutput(BaseModel):
     content: str
 
 
-# Possible types for agent input
+class StreamingDisplayOutput(BaseModel):
+    # just for display purpose on the frontend
+    type: Literal["streaming_display"] = Field(default="streaming_display")
+    content: str
+
+
+class MessageDelta(BaseModel):
+    type: Literal["message_delta"] = Field(default="message_delta")
+    content: str
+
+
+# possible types for agent input
 Input = Annotated[Union[Message, FormRequest, FormResult, ChoiceRequest, ChoiceResult], Field(discriminator="type")]
 
-# Possible types for agent output
+# possible types for agent output
 Output = Annotated[
-    Union[Message, ThinkingOutput, ToolCallOutput, ToolResponseOutput, FormRequest, ChoiceRequest],
+    Union[
+        Message,
+        ThinkingOutput,
+        ToolCallOutput,
+        ToolResponseOutput,
+        FormRequest,
+        ChoiceRequest,
+        MessageDelta,
+        StreamingDisplayOutput,
+    ],
     Field(discriminator="type"),
 ]
 
@@ -73,6 +95,80 @@ Output = Annotated[
 class LLMFinalResponse(BaseModel):
     type: Literal["message", "choice_request", "form_request"]
     content: Union[MessageAssistant, FormRequest, ChoiceRequest]
+
+    @classmethod
+    def llm_json_schema(cls) -> dict:
+        # LLM schema needs all fields to be required, so we return a json schema with all fields required
+        return {
+            "$defs": {
+                "ChoiceRequest": {
+                    "properties": {
+                        "type": {"const": "choice_request", "title": "Type", "type": "string"},
+                        "description": {
+                            "description": "The description of the choice question, displayed above the choices.",
+                            "title": "Description",
+                            "type": "string",
+                        },
+                        "options": {"items": {"type": "string"}, "title": "Options", "type": "array"},
+                        "single_choice": {"title": "Single Choice", "type": "boolean"},
+                    },
+                    "required": ["type", "options", "single_choice", "description"],
+                    "title": "ChoiceRequest",
+                    "type": "object",
+                    "additionalProperties": False,
+                },
+                "FormRequest": {
+                    "properties": {
+                        "type": {"const": "form_request", "title": "Type", "type": "string"},
+                        "description": {
+                            "description": "The description of the form, displayed above the form.",
+                            "title": "Description",
+                            "type": "string",
+                        },
+                        "rows": {"items": {"$ref": "#/$defs/FormRow"}, "title": "Rows", "type": "array"},
+                    },
+                    "title": "FormRequest",
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["type", "description", "rows"],
+                },
+                "FormRow": {
+                    "properties": {
+                        "header": {"title": "Header", "type": "string"},
+                        "content": {"default": "", "title": "Content", "type": "string"},  #
+                    },
+                    "required": ["header", "content"],
+                    "title": "FormRow",
+                    "type": "object",
+                    "additionalProperties": False,
+                },
+                "MessageAssistant": {
+                    "properties": {
+                        "type": {"const": "message", "title": "Type", "type": "string"},
+                        "content": {"title": "Content", "type": "string"},
+                    },
+                    "required": ["content", "type"],
+                    "title": "MessageAssistant",
+                    "type": "object",
+                    "additionalProperties": False,
+                },
+            },
+            "properties": {
+                "type": {"enum": ["message", "choice_request", "form_request"], "title": "Type", "type": "string"},
+                "content": {
+                    "anyOf": [
+                        {"$ref": "#/$defs/MessageAssistant"},
+                        {"$ref": "#/$defs/FormRequest"},
+                        {"$ref": "#/$defs/ChoiceRequest"},
+                    ],
+                    "title": "Content",
+                },
+            },
+            "required": ["type", "content"],
+            "title": "LLMFinalResponse",
+            "type": "object",
+            "additionalProperties": False,
+        }
 
 
 class UIContext(BaseModel):

@@ -60,8 +60,8 @@ def bytes_to_base64(data: bytes) -> str:
             try:
                 text_preview = data[:200].decode('utf-8', errors='ignore')
                 logger.error(f"Content as text: {text_preview}")
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"Failed to decode content as text: {e}")
             raise ValueError(f"Cannot identify or process image data: {e}")
 
     b64 = base64.b64encode(data).decode("ascii")
@@ -86,8 +86,8 @@ async def download_image_base64(url: str) -> str:
             try:
                 text_preview = res.content[:500].decode('utf-8', errors='ignore')
                 logger.warning(f"Response content preview: {text_preview}")
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"Failed to decode content as text: {e}")
             raise ValueError(f"Invalid content-type for image: {content_type}")
         
         # Try to use content-type from header, otherwise let bytes_to_base64 detect it

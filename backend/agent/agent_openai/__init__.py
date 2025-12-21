@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 
-oai_client = OpenAI()
+oai_client = AsyncOpenAI()

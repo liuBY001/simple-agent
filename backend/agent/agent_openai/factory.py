@@ -19,8 +19,6 @@ def create_report_agent():
         system_prompt=system_prompt,
         model="gpt-5.2",
         tools=[
-            "get_rednote_account_info",
-            "get_note_info",
             "read_current_report",
             "write_html_report",
         ],

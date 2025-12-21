@@ -8,6 +8,7 @@ dependencies = [
     "fastapi>=0.121.0",
     "jinja2>=3.1.6",
     "openai>=2.7.1",
+    "partialjson>=1.0.0",
     "pillow>=12.0.0",
     "python-dotenv>=1.2.1",
     "uvicorn>=0.38.0",

@@ -2,6 +2,7 @@ import json
 import asyncio
 from typing import AsyncGenerator
 import logging
+from partialjson.json_parser import JSONParser
 
 from ..schema import (
     UIContext,
@@ -15,12 +16,84 @@ from ..schema import (
     ChoiceRequest,
     ChoiceResult,
     LLMFinalResponse,
+    MessageDelta,
+    StreamingDisplayOutput,
 )
 from ..tools.tools import get_tool_schema_list, call_tool, tool_call_progress_message
 from .base_agent import ResponsiveAgent
 
 logger = logging.getLogger(__name__)
 
+
+class OpenaiStreamFilter:
+    def __init__(self):
+        self.final_response = None
+        self.json_partial_parser = JSONParser()
+
+    async def filter(self, response_generator: AsyncGenerator):
+        """
+        first_filter -> second_filter -> third_filter
+        """
+        async for item in self.third_filter(self.second_filter(self.first_filter(response_generator))):
+            yield item
+
+    async def third_filter(self, upstream_generator: AsyncGenerator):
+        # 上一层格式: (chunk_type, chunk_content)
+        # 第三层过滤，区分前端的type
+        async for chunk_type, chunk_content in upstream_generator:
+            if chunk_type == "response.output_text.delta":
+                yield MessageDelta(content=chunk_content)
+            elif chunk_type in ["response.reasoning_summary_text.delta", "response.function_call_arguments.delta"]:
+                yield StreamingDisplayOutput(content=chunk_content)
+
+    async def second_filter(self, upstream_generator: AsyncGenerator):
+        total_json_content = ""
+        text_content_old = ""
+
+        async for chunk_type, chunk_content in upstream_generator:
+            if chunk_type != "response.output_text.delta":
+                yield (chunk_type, chunk_content)
+                continue
+
+            total_json_content += chunk_content
+            try:
+                parsed = self.json_partial_parser.parse(total_json_content)
+            except Exception as e:
+                logger.error(f"error in parsing json text: {e}")
+                continue
+
+            # LLMFinalResponse
+            if not isinstance(parsed, dict):
+                continue
+            identified_message_type = parsed.get("type")
+            extracted_message_content = parsed.get("content", {})
+            if not isinstance(extracted_message_content, dict):
+                continue
+            text_content = extracted_message_content.get("content", "")
+            if not isinstance(text_content, str):
+                continue
+
+            if identified_message_type == "message":
+                length_old = len(text_content_old)
+                length_new = len(text_content)
+                if length_old < length_new:
+                    content_diff = text_content[length_old:length_new]
+                    text_content_old = text_content
+                    yield ("response.output_text.delta", content_diff)
+
+    async def first_filter(self, response_generator: AsyncGenerator):
+        allowed_stream_types = [
+            "response.reasoning_summary_text.delta",
+            "response.function_call_arguments.delta",
+            "response.output_text.delta",
+        ]
+        async for chunk in response_generator:
+            chunk_type = getattr(chunk, "type", "")
+            if chunk_type == "response.completed":
+                self.final_response = getattr(chunk, "response", None)
+            elif chunk_type in allowed_stream_types:
+                delta_content = getattr(chunk, "delta", "")
+                yield (chunk_type, delta_content)
 
 class Agent(ResponsiveAgent):
     def __init__(
@@ -31,6 +104,7 @@ class Agent(ResponsiveAgent):
         tools: list[str] = [],
         web_search: bool = True,
         reasonging_effort: str = "low",
+        verbosity: str = "medium",
         max_round_tool_call: int = 10,
     ):
         self.model = model
@@ -49,6 +123,7 @@ class Agent(ResponsiveAgent):
 
         # some configs
         self.reasoning_effort = reasonging_effort
+        self.verbosity = verbosity
         self.max_round_tool_call = max_round_tool_call
 
         logger.info(f"init agent with model: {self.model}, tools: {self.tools}, web_search: {web_search}, reasoning_effort: {self.reasoning_effort}, max_round_tool_call: {self.max_round_tool_call}")
@@ -72,13 +147,33 @@ class Agent(ResponsiveAgent):
             # get response
             logger.info(f"Round {i}, inputs sent to openai: {input_list}")
 
-            response = self.client.responses.parse(
+            response_generator = await self.client.responses.create(
                 model=self.model,
                 tools=self.tools,  # list of schemas
                 input=input_list,
                 reasoning={"effort": self.reasoning_effort, "summary": "auto"},
-                text_format=LLMFinalResponse,
+                text={
+                    "format": {
+                        "type": "json_schema",
+                        "name": "LLMFinalResponse",
+                        "schema": LLMFinalResponse.llm_json_schema(),
+                        "strict": True,
+                    },
+                    "verbosity": self.verbosity,
+                },
+                stream=True,
             )
+
+            openai_stream_filter = OpenaiStreamFilter()
+            async for parsed_chunk in openai_stream_filter.filter(response_generator):
+                yield self._output_to_sse(parsed_chunk)
+
+            response = openai_stream_filter.final_response
+
+            if not response:
+                yield self._output_to_sse(Message(role="assistant", content="Please try again."))
+                yield "data: done\n\n"
+                return
 
             logger.info(f"Round {i}, got openai response: {response.model_dump(warnings=False)}")
 
