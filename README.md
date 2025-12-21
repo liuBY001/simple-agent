@@ -22,8 +22,10 @@ The ability of the agent is bounded by the set of tools that it can call. The li
 - [x] update report
 - [x] provide choices for user to choose
 - [x] provide forms for user to complete
-- [ ] streaming message
-- [ ] streaming progress, especially the report generation
+- [x] streaming message
+- [x] streaming progress, display panel for token generation
+- [ ] file system, where can get last version of report or etc.
+- [ ] richer generation form, a2ui or mcp ui or something else
 
 ## Repo Structure
 
